@@ -1,0 +1,13 @@
+{
+  "name": "smiles-to-3d",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SMILES → 3D SDF converter in the browser, powered by official RDKit WebAssembly (ETKDGv3 + MMFF94/UFF)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "pages:deploy": "wrangler pages deploy public"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

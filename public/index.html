@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMILES → 3D SDF Converter · RDKit ETKDGv3</title>
+<meta name="description" content="Convert SMILES to 3D SDF in the browser using the official RDKit (WebAssembly). ETKDGv3 distance geometry with MMFF94/UFF force-field refinement.">
+<style>
+  :root{
+    --bg:#0b0e13; --panel:#141922; --panel2:#1b2230; --line:#28313f;
+    --fg:#e8edf5; --muted:#8b97a8; --accent:#4dabf7; --accent2:#2f9e44;
+    --ok:#37b24d; --warn:#f59f00; --err:#f03e3e;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif}
+  header{padding:12px 18px;border-bottom:1px solid var(--line);display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:var(--panel)}
+  header h1{font-size:15px;margin:0;font-weight:650;letter-spacing:.2px}
+  header .sub{color:var(--muted);font-size:12px}
+  .badge{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .badge.ready{color:var(--ok);border-color:#1f5130}
+  .badge.load{color:var(--warn);border-color:#5a4210}
+  .badge.err{color:var(--err);border-color:#5a1f1f}
+  main{display:grid;grid-template-columns:1fr 1fr;height:calc(100vh - 55px)}
+  @media (max-width:960px){main{grid-template-columns:1fr;height:auto}}
+  .col{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line)}
+  .col:last-child{border-right:none}
+  .bar{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+  .bar .grow{flex:1}
+  button{background:var(--accent);color:#04121f;border:0;padding:7px 13px;border-radius:7px;font-weight:650;cursor:pointer;font-size:13px;transition:.12s}
+  button:hover{filter:brightness(1.08)}
+  button:disabled{opacity:.45;cursor:not-allowed;filter:none}
+  button.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+  button.ghost:hover{background:var(--panel2)}
+  button.ok{background:var(--accent2);color:#fff}
+  select,input[type=number]{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12px}
+  label.chk{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;cursor:pointer;user-select:none}
+  textarea{flex:1;width:100%;min-height:280px;resize:none;border:0;outline:none;background:var(--panel2);color:var(--fg);
+           font:12px/1.6 var(--mono);padding:12px;white-space:pre;overflow:auto;tab-size:2}
+  .wrap{position:relative;flex:1;display:flex;min-height:300px}
+  .view{flex:1;background:radial-gradient(circle at 50% 38%,#1a2130,#0b0e13 72%);cursor:grab}
+  .view:active{cursor:grabbing}
+  .legend{position:absolute;right:12px;bottom:10px;font-size:11px;color:var(--muted);background:rgba(11,14,19,.72);
+          padding:5px 9px;border-radius:7px;pointer-events:none;border:1px solid var(--line)}
+  .status{font-size:12px;color:var(--muted);padding:7px 12px;border-top:1px solid var(--line);background:var(--panel);white-space:pre-wrap;max-height:130px;overflow:auto;font-family:var(--mono)}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)} .status.warn{color:var(--warn)}
+  .drop{border:1.5px dashed var(--line);border-radius:10px;padding:18px;text-align:center;color:var(--muted);margin:12px;cursor:pointer;transition:.15s}
+  .drop.hot{border-color:var(--accent);color:var(--accent);background:rgba(77,171,247,.06)}
+  details.meta{font-size:11px;color:var(--muted);padding:6px 12px;border-top:1px solid var(--line);background:var(--panel)}
+  details.meta summary{cursor:pointer}
+  code{font-family:var(--mono);color:#b8c4d6;background:var(--panel2);padding:1px 4px;border-radius:4px}
+  .hint{font-size:11px;color:var(--muted);padding:5px 12px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>SMILES → 3D SDF Converter</h1>
+  <span class="badge" id="rdkitStatus">Loading RDKit…</span>
+  <span class="sub">Official RDKit WebAssembly · ETKDGv3 distance geometry + MMFF94/UFF · fully client-side</span>
+</header>
+
+<main>
+  <!-- Left: input -->
+  <section class="col">
+    <div class="bar">
+      <button id="btnLoadEx" class="ghost">Load examples</button>
+      <button id="btnFile" class="ghost">Open file…</button>
+      <input type="file" id="fileInput" accept=".smi,.smiles,.txt,.csv" style="display:none">
+      <button id="btnClear" class="ghost">Clear</button>
+    </div>
+    <div id="drop" class="drop">Drop a .smi / .txt file here (or click to choose)</div>
+    <textarea id="input" spellcheck="false" placeholder="Paste SMILES here — one per line.&#10;Optionally use &quot;SMILES name&quot; to set the output title.&#10;&#10;CCO&#10;Oc1ccccc1 phenol&#10;CN1C=NC2=C1C(=O)N(C(=O)N2C)C caffeine"></textarea>
+    <div class="hint">Each line = one molecule. Lines starting with <code>#</code> are ignored. A trailing token after the SMILES becomes the molecule title.</div>
+    <div class="status" id="statusIn">Waiting for input.</div>
+  </section>
+
+  <!-- Right: 3D output -->
+  <section class="col">
+    <div class="bar">
+      <button id="btnConvert" disabled>Convert to 3D</button>
+      <label class="chk">Force field
+        <select id="optFF">
+          <option value="MMFF" selected>MMFF94 (fallback UFF)</option>
+          <option value="UFF">UFF</option>
+          <option value="none">None</option>
+        </select>
+      </label>
+      <label class="chk">Seed <input type="number" id="optSeed" value="42" style="width:70px"></label>
+      <span class="grow"></span>
+      <button id="btnCopy" class="ghost" disabled>Copy</button>
+      <button id="btnDownload" class="ok" disabled>Download 3D SDF</button>
+    </div>
+    <div class="wrap">
+      <canvas class="view" id="view"></canvas>
+      <div class="legend">drag to rotate · scroll to zoom · double-click to reset</div>
+    </div>
+    <div class="bar" style="border-top:1px solid var(--line);border-bottom:none">
+      <label class="chk"><input type="checkbox" id="optStick"> Wireframe</label>
+      <label class="chk"><input type="checkbox" id="optSpin"> Auto-rotate</label>
+      <span class="grow"></span>
+      <span class="badge" id="molInfo">—</span>
+    </div>
+    <div class="status" id="statusOut">Waiting for conversion.</div>
+    <details class="meta">
+      <summary>Method / reliability</summary>
+      <p>Conversion is performed in the browser by the <b>official RDKit compiled to WebAssembly</b>, using the same algorithms as the Python <code>rdkit</code> package:</p>
+      <p>① parse SMILES with <code>get_mol</code>; ② <code>AddHs</code> to add explicit hydrogens; ③ <code>EmbedMolecule</code> with <b>ETKDGv3</b> (experimental-torsion-corrected distance geometry) to generate 3D coordinates; ④ refine geometry with the <b>MMFF94</b> or <b>UFF</b> force field, falling back to UFF when MMFF parameters are unavailable.</p>
+      <p>The WASM is compiled from RDKit source (<code>Code/MinimalLib</code>) with an added 3D binding. Chemically identical to native RDKit, not a heuristic approximation.</p>
+    </details>
+  </section>
+</main>
+
+<script src="/rdkit/RDKit_minimal.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
